@@ -42,7 +42,7 @@ class EVMAdapter {
      * Automatically fetches nonce, estimates gas, and calculates fees
      */
     async buildUnsignedTransaction(params) {
-        const { from, to, amount, token, rpcUrl } = params;
+        const { from, to, amount, token, rpcUrl, rpcHeaders } = params;
         // Validate addresses
         if (!this.validateAddress(from)) {
             throw new Error(`Invalid from address: ${from}`);
@@ -51,7 +51,13 @@ class EVMAdapter {
             throw new Error(`Invalid to address: ${to}`);
         }
         // Create provider to fetch network data
-        const provider = new ethers_1.ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+        const fetchRequest = new ethers_1.ethers.FetchRequest(rpcUrl);
+        if (rpcHeaders) {
+            for (const [name, value] of Object.entries(rpcHeaders)) {
+                fetchRequest.setHeader(name, value);
+            }
+        }
+        const provider = new ethers_1.ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
         const type = token ? 'token' : 'native';
         let txData;
         let encodedData;
@@ -194,6 +200,11 @@ class EVMAdapter {
         if (options?.timeout) {
             fetchRequest.timeout = options.timeout;
         }
+        if (options?.headers) {
+            for (const [name, value] of Object.entries(options.headers)) {
+                fetchRequest.setHeader(name, value);
+            }
+        }
         const provider = new ethers_1.ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
         // Broadcast the signed transaction
         const txResponse = await provider.broadcastTransaction(signedTx.raw);
@@ -205,11 +216,17 @@ class EVMAdapter {
     /**
      * Get native asset balance for an address
      */
-    async getBalance(address, rpcUrl) {
+    async getBalance(address, rpcUrl, _utxoRpcConfig, rpcHeaders) {
         if (!this.validateAddress(address)) {
             throw new Error(`Invalid address: ${address}`);
         }
-        const provider = new ethers_1.ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+        const fetchRequest = new ethers_1.ethers.FetchRequest(rpcUrl);
+        if (rpcHeaders) {
+            for (const [name, value] of Object.entries(rpcHeaders)) {
+                fetchRequest.setHeader(name, value);
+            }
+        }
+        const provider = new ethers_1.ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
         const balanceWei = await provider.getBalance(address);
         // Get decimals from asset config (typically 18 for EVM chains)
         const decimals = 18;

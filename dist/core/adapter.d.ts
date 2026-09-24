@@ -12,6 +12,7 @@ export interface TransferParams {
     to: string;
     amount: string;
     rpcUrl: string;
+    rpcHeaders?: Record<string, string>;
     publicKey?: string;
     token?: {
         contractAddress?: string;
@@ -149,6 +150,7 @@ export interface BlockchainAdapter {
      */
     broadcastTransaction?(signedTx: SignedTransaction, rpcUrl: string, options?: {
         timeout?: number;
+        headers?: Record<string, string>;
         [key: string]: unknown;
     }): Promise<BroadcastResult>;
     /**
@@ -158,7 +160,7 @@ export interface BlockchainAdapter {
      * @param rpcUrl - RPC endpoint URL for the blockchain network
      * @returns Balance information
      */
-    getBalance?(address: string, rpcUrl: string, utxoRpcConfig?: TransferParams['utxoRpcConfig']): Promise<BalanceInfo>;
+    getBalance?(address: string, rpcUrl: string, utxoRpcConfig?: TransferParams['utxoRpcConfig'], rpcHeaders?: Record<string, string>): Promise<BalanceInfo>;
     /**
      * Get token balance for an address
      *

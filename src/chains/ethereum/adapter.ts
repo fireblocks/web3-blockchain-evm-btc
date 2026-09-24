@@ -57,7 +57,7 @@ export class EVMAdapter implements BlockchainAdapter {
    * Automatically fetches nonce, estimates gas, and calculates fees
    */
   async buildUnsignedTransaction(params: TransferParams): Promise<UnsignedTransaction> {
-    const { from, to, amount, token, rpcUrl } = params;
+    const { from, to, amount, token, rpcUrl, rpcHeaders } = params;
 
     // Validate addresses
     if (!this.validateAddress(from)) {
@@ -68,7 +68,13 @@ export class EVMAdapter implements BlockchainAdapter {
     }
 
     // Create provider to fetch network data
-    const provider = new ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+    const fetchRequest = new ethers.FetchRequest(rpcUrl);
+    if (rpcHeaders) {
+      for (const [name, value] of Object.entries(rpcHeaders)) {
+        fetchRequest.setHeader(name, value);
+      }
+    }
+    const provider = new ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
 
     const type = token ? 'token' : 'native';
     let txData: ethers.TransactionLike;
@@ -234,6 +240,7 @@ export class EVMAdapter implements BlockchainAdapter {
     rpcUrl: string,
     options?: {
       timeout?: number;
+      headers?: Record<string, string>;
       [key: string]: unknown;
     }
   ): Promise<BroadcastResult> {
@@ -241,6 +248,11 @@ export class EVMAdapter implements BlockchainAdapter {
     const fetchRequest = new ethers.FetchRequest(rpcUrl);
     if (options?.timeout) {
       fetchRequest.timeout = options.timeout;
+    }
+    if (options?.headers) {
+      for (const [name, value] of Object.entries(options.headers)) {
+        fetchRequest.setHeader(name, value);
+      }
     }
 
     const provider = new ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
@@ -257,12 +269,23 @@ export class EVMAdapter implements BlockchainAdapter {
   /**
    * Get native asset balance for an address
    */
-  async getBalance(address: string, rpcUrl: string): Promise<BalanceInfo> {
+  async getBalance(
+    address: string,
+    rpcUrl: string,
+    _utxoRpcConfig?: TransferParams['utxoRpcConfig'],
+    rpcHeaders?: Record<string, string>,
+  ): Promise<BalanceInfo> {
     if (!this.validateAddress(address)) {
       throw new Error(`Invalid address: ${address}`);
     }
 
-    const provider = new ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+    const fetchRequest = new ethers.FetchRequest(rpcUrl);
+    if (rpcHeaders) {
+      for (const [name, value] of Object.entries(rpcHeaders)) {
+        fetchRequest.setHeader(name, value);
+      }
+    }
+    const provider = new ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
     const balanceWei = await provider.getBalance(address);
 
     // Get decimals from asset config (typically 18 for EVM chains)

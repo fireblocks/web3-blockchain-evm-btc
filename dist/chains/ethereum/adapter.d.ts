@@ -25,12 +25,13 @@ export declare class EVMAdapter implements BlockchainAdapter {
      */
     broadcastTransaction(signedTx: SignedTransaction, rpcUrl: string, options?: {
         timeout?: number;
+        headers?: Record<string, string>;
         [key: string]: unknown;
     }): Promise<BroadcastResult>;
     /**
      * Get native asset balance for an address
      */
-    getBalance(address: string, rpcUrl: string): Promise<BalanceInfo>;
+    getBalance(address: string, rpcUrl: string, _utxoRpcConfig?: TransferParams['utxoRpcConfig'], rpcHeaders?: Record<string, string>): Promise<BalanceInfo>;
     /**
      * Get ERC20 token balance for an address
      */

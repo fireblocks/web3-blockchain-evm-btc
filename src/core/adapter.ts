@@ -15,6 +15,10 @@ export interface TransferParams {
   amount: string;         // Amount to transfer (in base units, e.g., wei for ETH)
   rpcUrl: string;         // RPC endpoint for fetching network data (nonce, gas prices, etc.)
 
+  // Optional custom headers to send with EVM JSON-RPC requests (e.g. auth for a
+  // gated RPC provider). Not used by non-EVM adapters.
+  rpcHeaders?: Record<string, string>;
+
   // Optional sender public key (hex). Required for chains where the unsigned
   // tx must embed the pubkey but it cannot be derived from the address
   // (e.g. Tezos reveal operations).
@@ -185,6 +189,7 @@ export interface BlockchainAdapter {
     rpcUrl: string,
     options?: {
       timeout?: number;       // Request timeout in milliseconds
+      headers?: Record<string, string>; // Custom headers for the RPC request (EVM only)
       [key: string]: unknown; // Additional blockchain-specific options
     }
   ): Promise<BroadcastResult>;
@@ -200,6 +205,7 @@ export interface BlockchainAdapter {
     address: string,
     rpcUrl: string,
     utxoRpcConfig?: TransferParams['utxoRpcConfig'],
+    rpcHeaders?: Record<string, string>,
   ): Promise<BalanceInfo>;
 
   /**
