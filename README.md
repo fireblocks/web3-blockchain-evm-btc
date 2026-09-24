@@ -1,19 +1,8 @@
 # @fireblocks-recovery/blockchain-evm-btc
 
 **EVM + Bitcoin-only subset** of
-[`@fireblocks-recovery/blockchain`](https://github.com/fireblocks/web3-blockchain). Multi-chain
-wallet derivation and transaction support for Fireblocks tooling, built on
-[`@fireblocks-recovery/assets-evm-btc`](https://github.com/fireblocks/web3-assets). Covers all
-EVM chains (auto-registered, mainnet + testnet, including legacy non-standard-coinType chains
-SGB/ETC/FLR) plus BTC/BTC_TEST. Has no dependency on `@fireblocks-recovery/crypto` - none of the
-chains in this subset need it (it's only used by the Solana/Sui/Aptos/Algorand adapters, which
-aren't included here).
-
-This is a **one-time filtered copy**, not a build variant - it was created by deleting all
-non-EVM/non-BTC chain adapter directories from `@fireblocks-recovery/blockchain`, trimming the
-hand-written exceptions in `blockchainRegistry.ts` down to BTC_TEST + SGB/ETC/FLR, and
-regenerating the registry. It does not automatically pick up new chains added upstream;
-re-derive it from the full package if you need to refresh the subset.
+Covers all EVM chains (auto-registered, mainnet + testnet, including legacy non-standard-coinType chains
+SGB/ETC/FLR) plus BTC/BTC_TEST. 
 
 ```ts
 import { getBlockchainAdapter } from '@fireblocks-recovery/blockchain-evm-btc';
@@ -74,8 +63,3 @@ opening a PR is currently the only verification gate.
 - Like `assets`, the registry files under `src/registry/*.generated.ts` are auto-generated -
   don't hand-edit them.
 - Add tests for new adapters in `src/test/allBlockchains.test.ts`.
-
-## License
-
-Proprietary - Fireblocks Ltd. This repository is public for ease of internal reuse across
-Fireblocks projects; it is not open source and is not licensed for use outside Fireblocks.
