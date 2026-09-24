@@ -1,0 +1,250 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function toPascalCase(str: string): string {
+  return str.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+}
+
+const chainsDir = path.join(__dirname, '../src/chains');
+const chainDirs = fs.readdirSync(chainsDir)
+  .filter(f => {
+    const fullPath = path.join(chainsDir, f);
+    const stats = fs.statSync(fullPath);
+    return stats.isDirectory();
+  });
+
+// Separate EVM and non-EVM chains
+const nonEvmChainDirs = chainDirs.filter(dir => dir !== 'ethereum');
+
+// Generate blockchain adapters registry
+let adapterImports = '';
+let adapterRegistrations = '';
+
+for (const dir of nonEvmChainDirs) {
+  const indexPath = path.join(chainsDir, dir, 'index.ts');
+  if (!fs.existsSync(indexPath)) {
+    console.warn(`Skipping ${dir} - no index.ts found`);
+    continue;
+  }
+
+  const pascalCase = toPascalCase(dir);
+  const adapterName = `${pascalCase}Adapter`;
+
+  adapterImports += `import { ${adapterName} } from '../chains/${dir}';\n`;
+
+  // Read the index file to find the chain ID
+  const indexContent = fs.readFileSync(indexPath, 'utf-8');
+  const chainIdMatch = indexContent.match(/id:\s*['"](\w+)['"]/);
+
+  if (!chainIdMatch) {
+    console.warn(`Skipping ${dir} - could not find chain ID in index.ts`);
+    continue;
+  }
+
+  const chainId = chainIdMatch[1];
+  adapterRegistrations += `  const ${chainId.toLowerCase()}Asset = getAssetConfig('${chainId}');\n`;
+  adapterRegistrations += `  if (${chainId.toLowerCase()}Asset && ${chainId.toLowerCase()}Asset.type === 'native') {\n`;
+  adapterRegistrations += `    NON_EVM_ADAPTERS['${chainId}'] = new ${adapterName}(${chainId.toLowerCase()}Asset);\n`;
+  adapterRegistrations += `  }\n\n`;
+}
+
+// Generate token standards registry
+let tokenStandardImports = '';
+let tokenStandardRegistrations = '';
+const discoveredTokenStandards: Array<{blockchain: string, chainId: string, standardName: string, className: string}> = [];
+
+for (const dir of chainDirs) {
+  const tokenStandardsDir = path.join(chainsDir, dir, 'tokenStandards');
+  if (!fs.existsSync(tokenStandardsDir)) {
+    continue;
+  }
+
+  const indexPath = path.join(chainsDir, dir, 'index.ts');
+  if (!fs.existsSync(indexPath)) {
+    continue;
+  }
+
+  // Read the index file to find the chain ID
+  const indexContent = fs.readFileSync(indexPath, 'utf-8');
+  const chainIdMatch = indexContent.match(/id:\s*['"](\w+)['"]/);
+
+  if (!chainIdMatch) {
+    console.warn(`Skipping token standards for ${dir} - could not find chain ID`);
+    continue;
+  }
+
+  const chainId = chainIdMatch[1];
+
+  // Scan for token standard files
+  const files = fs.readdirSync(tokenStandardsDir)
+    .filter(f => f.endsWith('.ts') && !f.endsWith('.d.ts'));
+
+  for (const file of files) {
+    const standardName = path.basename(file, '.ts');
+    const filePath = path.join(tokenStandardsDir, file);
+    const content = fs.readFileSync(filePath, 'utf-8');
+
+    // Extract the class name (e.g., "ASATokenStandard" from "export class ASATokenStandard")
+    const classMatch = content.match(/export\s+class\s+(\w+TokenStandard)/);
+    if (!classMatch) {
+      console.warn(`Skipping ${file} - no TokenStandard class found`);
+      continue;
+    }
+
+    const className = classMatch[1];
+    discoveredTokenStandards.push({
+      blockchain: dir,
+      chainId,
+      standardName: standardName.toUpperCase(),
+      className
+    });
+  }
+}
+
+// Generate imports for token standards
+for (const ts of discoveredTokenStandards) {
+  tokenStandardImports += `import { ${ts.className} } from '../chains/${ts.blockchain}/tokenStandards/${ts.standardName.toLowerCase()}';\n`;
+}
+
+// Add ERC20 manually since ethereum is handled specially
+tokenStandardImports += `import { ERC20Standard } from '../chains/ethereum/tokenStandards/erc20';\n`;
+
+// Generate instantiations for token standards
+for (const ts of discoveredTokenStandards) {
+  const instanceName = `${ts.standardName.toLowerCase()}Standard`;
+  tokenStandardRegistrations += `const ${instanceName} = new ${ts.className}();\n`;
+}
+
+// Add ERC20 manually
+tokenStandardRegistrations += `const erc20Standard = new ERC20Standard();\n`;
+
+tokenStandardRegistrations += '\n';
+
+// Now generate registrations
+for (const ts of discoveredTokenStandards) {
+  const instanceName = `${ts.standardName.toLowerCase()}Standard`;
+  tokenStandardRegistrations += `BASE_TOKEN_STANDARDS['${ts.chainId}:${ts.standardName}'] = ${instanceName};\n`;
+}
+
+// Register ERC20 for EVM chains - we'll use SGB as the canonical one
+tokenStandardRegistrations += `BASE_TOKEN_STANDARDS['ETH:ERC20'] = erc20Standard;\n`;
+tokenStandardRegistrations += `BASE_TOKEN_STANDARDS['SGB:ERC20'] = erc20Standard;\n`;
+
+// Generate blockchain adapters registry file
+const blockchainRegistryCode = `// ⚠️  AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
+// Generated by: scripts/generateRegistry.ts
+// Regenerate by running: pnpm run generate:registry
+
+import type { BlockchainAdapter } from '../core/adapter';
+import { getAssetConfig } from '@fireblocks-recovery/assets-evm-btc';
+
+${adapterImports}
+
+/**
+ * Registry for non-EVM blockchain adapters
+ * EVM chains are auto-registered from the assets package in blockchainRegistry.ts
+ */
+export const NON_EVM_ADAPTERS: Record<string, BlockchainAdapter> = {};
+
+${adapterRegistrations}
+
+export function registerNonEVMAdapters(registry: Record<string, BlockchainAdapter>): void {
+  Object.assign(registry, NON_EVM_ADAPTERS);
+}
+`;
+
+// Generate token standards registry file
+const tokenStandardRegistryCode = `// ⚠️  AUTO-GENERATED FILE - DO NOT EDIT MANUALLY
+// Generated by: scripts/generateRegistry.ts
+// Regenerate by running: pnpm run generate:registry
+
+import type { TokenStandard } from '../core/tokenStandard';
+import { getAssetConfig } from '@fireblocks-recovery/assets-evm-btc';
+${tokenStandardImports}
+/**
+ * Base registry with all discovered token standards
+ */
+const BASE_TOKEN_STANDARDS: Record<string, TokenStandard> = {};
+
+/**
+ * Auto-discovered token standards - instantiate and register
+ */
+${tokenStandardRegistrations}
+
+/**
+ * Check if a blockchain is EVM-compatible
+ */
+function isEVMCompatible(blockchainId: string): boolean {
+  const config = getAssetConfig(blockchainId);
+  if (!config || config.type !== 'native') return false;
+  // EVM chains use ECDSA with coinType 60 (mainnet) or 1 (testnet)
+  return config.algorithm === 'ECDSA' && (config.coinType === 60 || config.coinType === 1);
+}
+
+/**
+ * Get token standard by key (e.g., "ALGO:ASA" or "ETH:ERC20")
+ */
+export function getTokenStandard(key: string): TokenStandard {
+  // Check if explicitly registered
+  if (key in BASE_TOKEN_STANDARDS) {
+    return BASE_TOKEN_STANDARDS[key];
+  }
+
+  // Parse the key to get blockchain and standard
+  const [blockchainId, standardId] = key.split(':');
+
+  // Auto-detect ERC20 for any EVM-compatible chain (mainnet or testnet)
+  if (standardId === 'ERC20' && isEVMCompatible(blockchainId)) {
+    return BASE_TOKEN_STANDARDS['ETH:ERC20'] || BASE_TOKEN_STANDARDS['SGB:ERC20'];
+  }
+
+  // Fallback: token-standard address logic is network-agnostic, so a testnet
+  // variant (e.g. TRX_TEST:TRC20, SOL_TEST:SPL, ALGO_TEST:ASA) reuses the same
+  // canonical standard already registered for the mainnet chain.
+  const canonical = Object.entries(BASE_TOKEN_STANDARDS).find(
+    ([k]) => k.split(':')[1] === standardId
+  );
+  if (canonical) return canonical[1];
+
+  throw new Error(\`Unsupported token standard: \${key}\`);
+}
+
+export function getTokenStandardByBlockchain(
+  blockchainId: string,
+  standardId: string
+): TokenStandard {
+  const key = \`\${blockchainId}:\${standardId}\`;
+  return getTokenStandard(key);
+}
+
+export function getAllTokenStandards(): TokenStandard[] {
+  return Object.values(BASE_TOKEN_STANDARDS);
+}
+
+export function getTokenStandardsForBlockchain(blockchainId: string): TokenStandard[] {
+  return getAllTokenStandards().filter(
+    (standard) => standard.blockchainId === blockchainId
+  );
+}
+
+export function isTokenStandardSupported(key: string): boolean {
+  return key in BASE_TOKEN_STANDARDS;
+}
+
+export const TOKEN_STANDARD_REGISTRY = BASE_TOKEN_STANDARDS;
+`;
+
+// Write files
+const blockchainRegistryPath = path.join(__dirname, '../src/registry/blockchainRegistry.generated.ts');
+fs.writeFileSync(blockchainRegistryPath, blockchainRegistryCode);
+console.log(`✅ Generated blockchain registry with ${nonEvmChainDirs.length} non-EVM chains at ${blockchainRegistryPath}`);
+console.log(`   Chains: ${nonEvmChainDirs.join(', ')}`);
+
+const tokenStandardRegistryPath = path.join(__dirname, '../src/registry/tokenStandardRegistry.generated.ts');
+fs.writeFileSync(tokenStandardRegistryPath, tokenStandardRegistryCode);
+console.log(`✅ Generated token standard registry with ${discoveredTokenStandards.length} standards at ${tokenStandardRegistryPath}`);
+console.log(`   Standards: ${discoveredTokenStandards.map(ts => `${ts.chainId}:${ts.standardName}`).join(', ')}`);

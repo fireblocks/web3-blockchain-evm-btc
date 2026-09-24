@@ -1,0 +1,39 @@
+{
+  "name": "@fireblocks-recovery/blockchain-evm-btc",
+  "version": "0.1.0",
+  "license": "UNLICENSED",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "generate:registry": "tsx scripts/generateRegistry.ts",
+    "prebuild": "pnpm run generate:registry",
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+  },
+  "dependencies": {
+    "@fireblocks-recovery/assets-evm-btc": "github:fireblocks/web3-assets-evm-btc",
+    "@noble/curves": "^1.7.0",
+    "@noble/hashes": "^1.6.1",
+    "bs58check": "^3.0.1",
+    "ethers": "^6.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.5"
+  }
+}
