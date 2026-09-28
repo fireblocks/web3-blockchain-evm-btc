@@ -215,13 +215,15 @@ export interface BlockchainAdapter {
    * @param tokenAddress - Token contract address (ERC20) or mint address (SPL)
    * @param decimals - Token decimals
    * @param rpcUrl - RPC endpoint URL for the blockchain network
+   * @param rpcHeaders - Optional custom headers for the RPC request (EVM only)
    * @returns Balance information
    */
   getTokenBalance?(
     address: string,
     tokenAddress: string,
     decimals: number,
-    rpcUrl: string
+    rpcUrl: string,
+    rpcHeaders?: Record<string, string>,
   ): Promise<BalanceInfo>;
 
   /**
@@ -229,11 +231,13 @@ export interface BlockchainAdapter {
    *
    * @param txHash - Transaction hash to check
    * @param rpcUrl - RPC endpoint URL for the blockchain network
+   * @param rpcHeaders - Optional custom headers for the RPC request (EVM only)
    * @returns Transaction status information
    */
   getTransactionStatus?(
     txHash: string,
-    rpcUrl: string
+    rpcUrl: string,
+    rpcHeaders?: Record<string, string>,
   ): Promise<{ confirmed: boolean; blockNumber?: number; failed?: boolean; error?: string }>;
 
   /**
@@ -271,6 +275,7 @@ export interface BlockchainAdapter {
    *
    * @param address - Address to calculate max amount for
    * @param rpcUrl - RPC endpoint URL for fetching balance and fee data
+   * @param rpcHeaders - Optional custom headers for the RPC request (EVM only)
    * @returns Object containing:
    *   - maxAmount: Maximum transferable in base units (e.g., wei, lamports, satoshis)
    *   - displayAmount: Human-readable amount with proper decimal formatting
@@ -290,5 +295,6 @@ export interface BlockchainAdapter {
     /** Pre-fetched balance in base units - avoids a redundant RPC round-trip */
     currentBalance?: string,
     utxoRpcConfig?: TransferParams['utxoRpcConfig'],
+    rpcHeaders?: Record<string, string>,
   ): Promise<{ maxAmount: string; displayAmount: string }>;
 }

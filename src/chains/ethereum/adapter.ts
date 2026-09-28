@@ -53,6 +53,32 @@ export class EVMAdapter implements BlockchainAdapter {
   }
 
   /**
+   * Single choke-point for constructing a provider for this chain. Every RPC-making
+   * method must go through this - it's the only place custom auth headers (and any
+   * future per-request option) get applied, so no endpoint can add a new RPC call
+   * that silently skips them.
+   */
+  private createProvider(
+    rpcUrl: string,
+    options?: { headers?: Record<string, string>; timeout?: number },
+  ): ethers.JsonRpcProvider {
+    if (!options?.headers && !options?.timeout) {
+      return new ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+    }
+
+    const fetchRequest = new ethers.FetchRequest(rpcUrl);
+    if (options.timeout) {
+      fetchRequest.timeout = options.timeout;
+    }
+    if (options.headers) {
+      for (const [name, value] of Object.entries(options.headers)) {
+        fetchRequest.setHeader(name, value);
+      }
+    }
+    return new ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
+  }
+
+  /**
    * Creates an unsigned transaction for ETH or ERC20 token transfer
    * Automatically fetches nonce, estimates gas, and calculates fees
    */
@@ -68,13 +94,7 @@ export class EVMAdapter implements BlockchainAdapter {
     }
 
     // Create provider to fetch network data
-    const fetchRequest = new ethers.FetchRequest(rpcUrl);
-    if (rpcHeaders) {
-      for (const [name, value] of Object.entries(rpcHeaders)) {
-        fetchRequest.setHeader(name, value);
-      }
-    }
-    const provider = new ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
+    const provider = this.createProvider(rpcUrl, { headers: rpcHeaders });
 
     const type = token ? 'token' : 'native';
     let txData: ethers.TransactionLike;
@@ -244,18 +264,11 @@ export class EVMAdapter implements BlockchainAdapter {
       [key: string]: unknown;
     }
   ): Promise<BroadcastResult> {
-    // Create provider with optional timeout
-    const fetchRequest = new ethers.FetchRequest(rpcUrl);
-    if (options?.timeout) {
-      fetchRequest.timeout = options.timeout;
-    }
-    if (options?.headers) {
-      for (const [name, value] of Object.entries(options.headers)) {
-        fetchRequest.setHeader(name, value);
-      }
-    }
-
-    const provider = new ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
+    // Create provider with optional timeout and headers
+    const provider = this.createProvider(rpcUrl, {
+      timeout: options?.timeout,
+      headers: options?.headers,
+    });
 
     // Broadcast the signed transaction
     const txResponse = await provider.broadcastTransaction(signedTx.raw);
@@ -279,13 +292,7 @@ export class EVMAdapter implements BlockchainAdapter {
       throw new Error(`Invalid address: ${address}`);
     }
 
-    const fetchRequest = new ethers.FetchRequest(rpcUrl);
-    if (rpcHeaders) {
-      for (const [name, value] of Object.entries(rpcHeaders)) {
-        fetchRequest.setHeader(name, value);
-      }
-    }
-    const provider = new ethers.JsonRpcProvider(fetchRequest, this.evmChainId, { staticNetwork: true });
+    const provider = this.createProvider(rpcUrl, { headers: rpcHeaders });
     const balanceWei = await provider.getBalance(address);
 
     // Get decimals from asset config (typically 18 for EVM chains)
@@ -306,7 +313,8 @@ export class EVMAdapter implements BlockchainAdapter {
     address: string,
     tokenAddress: string,
     decimals: number,
-    rpcUrl: string
+    rpcUrl: string,
+    rpcHeaders?: Record<string, string>,
   ): Promise<BalanceInfo> {
     if (!this.validateAddress(address)) {
       throw new Error(`Invalid address: ${address}`);
@@ -315,7 +323,7 @@ export class EVMAdapter implements BlockchainAdapter {
       throw new Error(`Invalid token address: ${tokenAddress}`);
     }
 
-    const provider = new ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+    const provider = this.createProvider(rpcUrl, { headers: rpcHeaders });
     const contract = new ethers.Contract(
       tokenAddress,
       ['function balanceOf(address) view returns (uint256)'],
@@ -337,9 +345,10 @@ export class EVMAdapter implements BlockchainAdapter {
    */
   async getTransactionStatus(
     txHash: string,
-    rpcUrl: string
+    rpcUrl: string,
+    rpcHeaders?: Record<string, string>,
   ): Promise<{ confirmed: boolean; blockNumber?: number }> {
-    const provider = new ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+    const provider = this.createProvider(rpcUrl, { headers: rpcHeaders });
 
     try {
       const receipt = await provider.getTransactionReceipt(txHash);
@@ -409,13 +418,16 @@ export class EVMAdapter implements BlockchainAdapter {
    */
   async getMaxTransferableAmount(
     address: string,
-    rpcUrl: string
+    rpcUrl: string,
+    _currentBalance?: string,
+    _utxoRpcConfig?: TransferParams['utxoRpcConfig'],
+    rpcHeaders?: Record<string, string>,
   ): Promise<{ maxAmount: string; displayAmount: string }> {
     // Get current balance
-    const balance = await this.getBalance(address, rpcUrl);
+    const balance = await this.getBalance(address, rpcUrl, undefined, rpcHeaders);
     const balanceWei = BigInt(balance.balance);
 
-    const provider = new ethers.JsonRpcProvider(rpcUrl, this.evmChainId, { staticNetwork: true });
+    const provider = this.createProvider(rpcUrl, { headers: rpcHeaders });
 
     try {
       // Get current fee data from the network

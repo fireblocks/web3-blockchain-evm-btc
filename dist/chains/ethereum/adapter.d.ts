@@ -8,6 +8,13 @@ export declare class EVMAdapter implements BlockchainAdapter {
     validateAddress(address: string): boolean;
     getSupportedAddressTypes(): import("@fireblocks-recovery/assets-evm-btc").AddressType[];
     /**
+     * Single choke-point for constructing a provider for this chain. Every RPC-making
+     * method must go through this - it's the only place custom auth headers (and any
+     * future per-request option) get applied, so no endpoint can add a new RPC call
+     * that silently skips them.
+     */
+    private createProvider;
+    /**
      * Creates an unsigned transaction for ETH or ERC20 token transfer
      * Automatically fetches nonce, estimates gas, and calculates fees
      */
@@ -35,11 +42,11 @@ export declare class EVMAdapter implements BlockchainAdapter {
     /**
      * Get ERC20 token balance for an address
      */
-    getTokenBalance(address: string, tokenAddress: string, decimals: number, rpcUrl: string): Promise<BalanceInfo>;
+    getTokenBalance(address: string, tokenAddress: string, decimals: number, rpcUrl: string, rpcHeaders?: Record<string, string>): Promise<BalanceInfo>;
     /**
      * Get transaction confirmation status on Ethereum
      */
-    getTransactionStatus(txHash: string, rpcUrl: string): Promise<{
+    getTransactionStatus(txHash: string, rpcUrl: string, rpcHeaders?: Record<string, string>): Promise<{
         confirmed: boolean;
         blockNumber?: number;
     }>;
@@ -90,7 +97,7 @@ export declare class EVMAdapter implements BlockchainAdapter {
      * // result.displayAmount = "0.99895" (human-readable)
      * ```
      */
-    getMaxTransferableAmount(address: string, rpcUrl: string): Promise<{
+    getMaxTransferableAmount(address: string, rpcUrl: string, _currentBalance?: string, _utxoRpcConfig?: TransferParams['utxoRpcConfig'], rpcHeaders?: Record<string, string>): Promise<{
         maxAmount: string;
         displayAmount: string;
     }>;

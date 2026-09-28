@@ -351,6 +351,44 @@ describe("Transaction Creation - ERC20 token transfer (ETH)", () => {
   });
 });
 
+// ─── Custom RPC headers ───────────────────────────────────────────────────────
+// EVMAdapter.createProvider() is the single choke-point for provider construction;
+// this specifically covers getMaxTransferableAmount, which previously built its own
+// bare `new ethers.JsonRpcProvider(rpcUrl)` and silently dropped any configured
+// header on both its internal balance lookup and its fee-data lookup.
+describe("Custom RPC headers - getMaxTransferableAmount", () => {
+  it("forwards configured headers to both the balance and fee-data providers", async () => {
+    const setHeaderSpy = vi.spyOn(ethers.FetchRequest.prototype, "setHeader");
+
+    const adapter = getBlockchainAdapter("ETH");
+    await adapter.getMaxTransferableAmount!(
+      ECDSA_WALLET.address,
+      "http://localhost:8545",
+      undefined,
+      undefined,
+      { Authorization: "Bearer test-token" },
+    );
+
+    expect(setHeaderSpy).toHaveBeenCalledWith("Authorization", "Bearer test-token");
+    // Called once for the getBalance() lookup and once for the getFeeData() lookup -
+    // both providers built by getMaxTransferableAmount must carry the header.
+    expect(setHeaderSpy).toHaveBeenCalledTimes(2);
+
+    setHeaderSpy.mockRestore();
+  });
+
+  it("omits headers entirely when none are configured", async () => {
+    const setHeaderSpy = vi.spyOn(ethers.FetchRequest.prototype, "setHeader");
+
+    const adapter = getBlockchainAdapter("ETH");
+    await adapter.getMaxTransferableAmount!(ECDSA_WALLET.address, "http://localhost:8545");
+
+    expect(setHeaderSpy).not.toHaveBeenCalled();
+
+    setHeaderSpy.mockRestore();
+  });
+});
+
 // ─── Adapter getSupportedAddressTypes ────────────────────────────────────────
 describe("getSupportedAddressTypes()", () => {
   it("BTC returns legacy and segwit types", () => {
